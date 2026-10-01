@@ -1,0 +1,13 @@
+diff --git a/src/vde_plug2tap.c b/src/vde_plug2tap.c
+index b7be6d9..ef066e3 100644
+--- a/src/vde_plug2tap.c
++++ b/src/vde_plug2tap.c
+@@ -27,7 +27,7 @@
+ #include <vdecommon.h>
+ #include <libvdeplug.h>
+ 
+-#define BUFSIZE 2048
++#define BUFSIZE (9216 + 14 + 4) /* VDE_ETHBUFSIZE: jumbo frames up to MTU 9216, as the Docker plugin */
+ 
+ #if defined VDE_LINUX || defined VDE_BIONIC
+ #include <net/if.h>

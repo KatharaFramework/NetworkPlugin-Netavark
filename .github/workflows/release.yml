@@ -1,0 +1,69 @@
+# Build the relocatable bundle (both plugins + VDE) and publish it in a GitHub release for every v* tag.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bundle:
+    # Native builds on GitHub-hosted runners of each architecture: no emulation.
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0          # git describe needs the tags to compute the plugin version
+
+      - name: Build bundle
+        run: |
+          docker build -f packaging/Containerfile --output type=local,dest=dist .
+          ls -la dist/
+
+      - name: Name and checksum
+        run: |
+          version="${GITHUB_REF_NAME}"
+          [ "${GITHUB_REF_TYPE}" = tag ] || version="dev-${GITHUB_SHA::7}"
+          name="katharanp-netavark-${version}-linux-${{ matrix.arch }}.tar.gz"
+          mv "dist/katharanp-bundle-${{ matrix.arch }}.tar.gz" "dist/${name}"
+          for bin in katharanp_vde katharanp; do
+            tar -xzOf "dist/${name}" "katharanp/bin/${bin}" | file -
+          done
+          (cd dist && sha256sum "${name}" > "${name}.sha256")
+          tar -tzf "dist/${name}"
+          cat dist/*.sha256
+
+      - name: Keep the bundle as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundle-${{ matrix.arch }}
+          path: dist/*
+
+  # One job publishes every architecture, so that the matrix jobs do not race to create the release.
+  publish:
+    if: github.ref_type == 'tag'
+    needs: bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: bundle-*
+          path: dist
+          merge-multiple: true
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

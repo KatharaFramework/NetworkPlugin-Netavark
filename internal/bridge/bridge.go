@@ -21,8 +21,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/oligiochi/katharanp-netavark/internal/attach"
-	"github.com/oligiochi/katharanp-netavark/internal/netavark"
+	"github.com/KatharaFramework/NetworkPlugin-Netavark/internal/attach"
+	"github.com/KatharaFramework/NetworkPlugin-Netavark/internal/netavark"
 )
 
 const (

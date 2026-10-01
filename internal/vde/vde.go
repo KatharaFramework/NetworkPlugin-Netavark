@@ -12,8 +12,8 @@ import (
 
 	katnplib "github.com/KatharaFramework/NetworkPluginLib"
 
-	"github.com/oligiochi/katharanp-netavark/internal/attach"
-	"github.com/oligiochi/katharanp-netavark/internal/netavark"
+	"github.com/KatharaFramework/NetworkPlugin-Netavark/internal/attach"
+	"github.com/KatharaFramework/NetworkPlugin-Netavark/internal/netavark"
 )
 
 // Indirections over the operations that start or stop real processes, replaced in tests.

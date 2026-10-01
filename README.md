@@ -1,4 +1,4 @@
-# katharanp-netavark
+# NetworkPlugin-Netavark
 
 Netavark plugins of [Kathará](https://www.kathara.org): pure L2 collision domains for the Podman backend.
 Counterparts of the two Docker plugins of [NetworkPlugin](https://github.com/KatharaFramework/NetworkPlugin)

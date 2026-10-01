@@ -1,4 +1,4 @@
-module github.com/oligiochi/katharanp-netavark
+module github.com/KatharaFramework/NetworkPlugin-Netavark
 
 go 1.21
 

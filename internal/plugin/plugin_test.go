@@ -4,8 +4,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/oligiochi/katharanp-netavark/internal/attach"
-	"github.com/oligiochi/katharanp-netavark/internal/netavark"
+	"github.com/KatharaFramework/NetworkPlugin-Netavark/internal/attach"
+	"github.com/KatharaFramework/NetworkPlugin-Netavark/internal/netavark"
 )
 
 const testNetworkID = "963ca160b022aabbccddeeff00112233"

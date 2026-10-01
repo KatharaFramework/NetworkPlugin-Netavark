@@ -11,7 +11,7 @@ import (
 
 	"github.com/vishvananda/netlink/nl"
 
-	"github.com/oligiochi/katharanp-netavark/internal/attach"
+	"github.com/KatharaFramework/NetworkPlugin-Netavark/internal/attach"
 )
 
 const testNetworkID = "963ca160b022aabbccddeeff00112233"

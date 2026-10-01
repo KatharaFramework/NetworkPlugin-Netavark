@@ -15,8 +15,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/oligiochi/katharanp-netavark/internal/netavark"
-	"github.com/oligiochi/katharanp-netavark/internal/plugin"
+	"github.com/KatharaFramework/NetworkPlugin-Netavark/internal/netavark"
+	"github.com/KatharaFramework/NetworkPlugin-Netavark/internal/plugin"
 )
 
 // Main runs the subcommand in os.Args and exits. version is reported by `info`.

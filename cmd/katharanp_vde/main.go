@@ -4,8 +4,8 @@
 package main
 
 import (
-	"github.com/oligiochi/katharanp-netavark/internal/cli"
-	"github.com/oligiochi/katharanp-netavark/internal/vde"
+	"github.com/KatharaFramework/NetworkPlugin-Netavark/internal/cli"
+	"github.com/KatharaFramework/NetworkPlugin-Netavark/internal/vde"
 )
 
 // version is set at build time: go build -ldflags "-X main.version=..."

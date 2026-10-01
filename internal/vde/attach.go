@@ -18,7 +18,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/oligiochi/katharanp-netavark/internal/attach"
+	"github.com/KatharaFramework/NetworkPlugin-Netavark/internal/attach"
 )
 
 // carrierPause is the pause after each carrier change.

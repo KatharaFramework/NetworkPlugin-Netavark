@@ -1,0 +1,95 @@
+# Spike P17 — relocatable bundle of the Kathará netavark plugin with VDE.
+#
+# Built on an older glibc (Debian 12, glibc 2.36) so that the binaries run on newer distributions
+# (every distribution shipping Podman 5 has a newer glibc).
+# Everything is installed under $PREFIX with RPATH=$ORIGIN/../lib, so the bundle can be moved anywhere.
+#
+# Build from the root of katharanp-netavark (submodule checked out):
+#   podman build -t katharanp-bundle -f packaging/Containerfile .
+FROM debian:12 AS build
+
+ARG GO_VERSION=1.22.5
+ARG PREFIX=/opt/katharanp
+ENV PREFIX=${PREFIX}
+# Make the libraries installed in $PREFIX visible to the next builds: gcc reads CPATH for headers and
+# LIBRARY_PATH for linking; LD_LIBRARY_PATH is needed by build steps that run freshly built binaries.
+ENV CPATH=${PREFIX}/include \
+    LIBRARY_PATH=${PREFIX}/lib \
+    LD_LIBRARY_PATH=${PREFIX}/lib \
+    PKG_CONFIG_PATH=${PREFIX}/lib/pkgconfig
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential cmake autoconf automake libtool pkg-config git ca-certificates curl patch patchelf \
+    && rm -rf /var/lib/apt/lists/*
+
+# Native build: the architecture of the bundle is the one of the build host (amd64 or arm64), with the
+# same names Go and Debian use.
+RUN curl -fsSL https://go.dev/dl/go${GO_VERSION}.linux-$(dpkg --print-architecture).tar.gz | tar -C /usr/local -xz
+ENV PATH=/usr/local/go/bin:$PATH
+
+# Every binary and library looks for its dependencies in ../lib relative to itself.
+ENV RPATH='$ORIGIN/../lib'
+ENV CMAKE_COMMON="-DCMAKE_INSTALL_PREFIX=${PREFIX} -DCMAKE_INSTALL_LIBDIR=lib -DCMAKE_INSTALL_RPATH=\$ORIGIN/../lib -DCMAKE_PREFIX_PATH=${PREFIX}"
+
+WORKDIR /src
+
+# 1. s2argv-execs (dependency of vdeplug4)
+RUN git clone --depth 1 https://github.com/rd235/s2argv-execs.git && cd s2argv-execs \
+    && autoreconf -if && ./configure --prefix=${PREFIX} --libdir=${PREFIX}/lib \
+    && make -j"$(nproc)" && make install
+
+# 2. vdeplug4 (libvdeplug and its modules; needed by vde_plug2tap and by the plugin through cgo)
+COPY packaging/patches/vdeplug4-libgen.patch /src/
+RUN git clone --depth 1 https://github.com/rd235/vdeplug4.git && cd vdeplug4 \
+    && patch -p1 < /src/vdeplug4-libgen.patch \
+    && mkdir build && cd build && cmake ${CMAKE_COMMON} .. && make -j"$(nproc)" && make install
+
+# 3. vde-2 with the jumbo frames patch of the Docker plugin; TUNTAP stays ON (we need vde_plug2tap)
+COPY third_party/NetworkPlugin/vde/img-src/support-for-jumbo.patch /src/
+COPY packaging/patches/vde_plug2tap-jumbo.patch /src/
+RUN git clone --depth 1 https://github.com/virtualsquare/vde-2 && cd vde-2 \
+    && patch -p1 < /src/support-for-jumbo.patch \
+    && patch -p1 < /src/vde_plug2tap-jumbo.patch \
+    && mkdir build && cd build \
+    && cmake ${CMAKE_COMMON} -DENABLE_CRYPTCAB=OFF -DENABLE_VDE_OVER_NS=OFF -DENABLE_ROUTER=OFF \
+             -DENABLE_VXLAN=OFF -DENABLE_PCAP=OFF .. \
+    && make -j"$(nproc)" && make install
+
+# 4. the plugins: katharanp_vde linked against the bundled libvdeplug, katharanp (Linux bridge) static
+WORKDIR /src/katharanp-netavark
+COPY . .
+RUN CGO_ENABLED=1 CGO_CFLAGS="-I${PREFIX}/include" CGO_LDFLAGS="-L${PREFIX}/lib" go test ./...
+RUN CGO_ENABLED=1 \
+    CGO_CFLAGS="-I${PREFIX}/include" \
+    CGO_LDFLAGS="-L${PREFIX}/lib -Wl,-rpath,\$ORIGIN/../lib" \
+    go build -ldflags "-X main.version=$(git describe --tags --always --dirty 2>/dev/null || echo dev)" \
+       -o ${PREFIX}/bin/katharanp_vde ./cmd/katharanp_vde
+RUN CGO_ENABLED=0 \
+    go build -ldflags "-X main.version=$(git describe --tags --always --dirty 2>/dev/null || echo dev)" \
+       -o ${PREFIX}/bin/katharanp ./cmd/katharanp
+
+# 5. make sure every ELF file has a relative RPATH (patchelf fails on non-ELF files)
+RUN for f in ${PREFIX}/bin/*; do patchelf --set-rpath '$ORIGIN/../lib' "$f" 2>/dev/null || true; done; \
+    for f in ${PREFIX}/lib/*.so*; do [ -L "$f" ] || patchelf --set-rpath '$ORIGIN' "$f" 2>/dev/null || true; done; \
+    for f in ${PREFIX}/lib/vdeplug/*.so*; do [ -L "$f" ] || patchelf --set-rpath '$ORIGIN/..' "$f" 2>/dev/null || true; done
+
+# 6. minimal bundle: only what the plugin uses, plus licenses and the exact source revisions (VDE is GPL)
+RUN set -e; B=/bundle/katharanp; \
+    mkdir -p $B/bin $B/lib/vdeplug $B/licenses; \
+    cp ${PREFIX}/bin/katharanp_vde ${PREFIX}/bin/katharanp ${PREFIX}/bin/vde_switch ${PREFIX}/bin/vde_plug2tap $B/bin/; \
+    cp -a ${PREFIX}/lib/libvdeplug.so* ${PREFIX}/lib/libvdeplug_mod.so* ${PREFIX}/lib/libexecs.so* $B/lib/; \
+    cp -a ${PREFIX}/lib/vdeplug/libvdeplug_vde.so* $B/lib/vdeplug/; \
+    for d in s2argv-execs vdeplug4 vde-2; do \
+        mkdir -p $B/licenses/$d; \
+        cp /src/$d/COPYING* /src/$d/LICENSE* $B/licenses/$d/ 2>/dev/null || true; \
+        echo "$d $(git -C /src/$d remote get-url origin) $(git -C /src/$d rev-parse HEAD)" >> $B/SOURCES; \
+    done; \
+    mkdir -p $B/licenses/patches && cp /src/*.patch $B/licenses/patches/; \
+    cp /src/katharanp-netavark/LICENSE $B/licenses/katharanp-netavark.txt 2>/dev/null || true; \
+    echo "katharanp-netavark $($B/bin/katharanp_vde info)" >> $B/SOURCES; \
+    echo "katharanp $($B/bin/katharanp info)" >> $B/SOURCES; \
+    mkdir /out && tar -C /bundle -czf /out/katharanp-bundle-$(dpkg --print-architecture).tar.gz katharanp
+
+# Export stage: only the bundle, written to the host by `podman build --output`.
+FROM scratch AS export
+COPY --from=build /out/ /
